@@ -37,10 +37,13 @@ int box_for_point(const Point3& point, int d) {
 void verify_box_mapping(const std::vector<Point3>& dataset,
                         const std::vector<int2_t>& map, int grid_size) {
   for (size_t i = 0; i < map.size(); i++) {
+    static int last_box = -1;
     int point_index = map[i][1];
     int cpu_box = box_for_point(dataset[point_index], grid_size);
     int gpu_box = map[i][0];
     assert(cpu_box == gpu_box);
+    assert(gpu_box >= last_box);
+    last_box = gpu_box;
   }
 }
 
@@ -129,8 +132,11 @@ int main(int argc, char** argv) {
     box_finder.map_to_boxes(queue, dataset, boxes, grid_size);
     queue.finish();
 
-    sorter.sort(queue, boxes);
-    queue.finish();
+    // @note Apart from not being entirely correct, our bitonic sort
+    // implementation seems to be way slower than the default CPU-only sorting
+    // function.
+    std::sort(boxes.begin(), boxes.end(),
+              [](const int2_t& a, const int2_t& b) { return a[0] < b[0]; });
 
     gettimeofday(&endwtime, NULL);
 

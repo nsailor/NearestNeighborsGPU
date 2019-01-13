@@ -1,7 +1,6 @@
 __kernel void sort2_global(__global int2 *data, uint k, uint j)
 {
     unsigned int index = get_global_id(0);
-    unsigned int length = get_global_size(0);
 
     unsigned int ixj = index ^ j;
     if (ixj > index) {

@@ -45,7 +45,7 @@ class Sorter : public KernelAlgorithm {
         queue.enqueueNDRangeKernel(kernel_global, 0, length);
       }
     }
-    queue.enqueueReadBuffer(buffer, false, 0, array.size() * sizeof(int) * 2,
+    queue.enqueueReadBuffer(buffer, true, 0, array.size() * sizeof(int) * 2,
                             &array[0]);
   }
 
