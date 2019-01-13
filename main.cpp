@@ -2,7 +2,8 @@
 #include "cl.hpp"
 #include "clutil.hpp"
 #include "sort.hpp"
-#include <fstream>
+#include <array>
+#include <cassert>
 #include <iostream>
 #include <random>
 #include <sys/time.h>
@@ -25,16 +26,58 @@ std::vector<Point3> generate_dataset(size_t n) {
   return data;  // C++1x move semantics should prevent a deep copy here.
 }
 
+int box_for_point(const Point3& point, int d) {
+  float grid_step = 1.0f / (float) d;
+  int x_box = point.x / grid_step;
+  int y_box = point.y / grid_step;
+  int z_box = point.z / grid_step;
+  return z_box * d * d + y_box * d + x_box;
+}
+
+void verify_box_mapping(const std::vector<Point3>& dataset,
+                        const std::vector<int2_t>& map, int grid_size) {
+  for (size_t i = 0; i < map.size(); i++) {
+    int point_index = map[i][1];
+    int cpu_box = box_for_point(dataset[point_index], grid_size);
+    int gpu_box = map[i][0];
+    assert(cpu_box == gpu_box);
+  }
+}
+
+class BoxFinder : KernelAlgorithm {
+ public:
+  BoxFinder(cl::Context& _context) : KernelAlgorithm(_context) {
+    load_program("boxes.cl");
+    map_to_boxes_kernel = cl::Kernel(program, "map_to_boxes");
+  }
+
+  void map_to_boxes(cl::CommandQueue& queue, std::vector<Point3>& points,
+                    std::vector<int2_t>& box_map, int grid_size) {
+    size_t buffer_size = sizeof(Point3) * points.size();
+    cl::Buffer point_buf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
+                         sizeof(Point3) * points.size());
+    queue.enqueueWriteBuffer(point_buf, false, 0,
+                             sizeof(Point3) * points.size(), &points[0]);
+    cl::Buffer boxes_buf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY,
+                         sizeof(int) * 2 * box_map.size());
+    map_to_boxes_kernel.setArg(0, point_buf);
+    map_to_boxes_kernel.setArg(1, boxes_buf);
+    map_to_boxes_kernel.setArg(2, grid_size);
+    queue.enqueueNDRangeKernel(map_to_boxes_kernel, 0, points.size());
+    queue.enqueueReadBuffer(boxes_buf, false, 0,
+                            sizeof(int) * 2 * box_map.size(),
+                            box_map[0].data());
+  }
+
+ protected:
+  cl::Kernel map_to_boxes_kernel;
+};
+
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << "Usage: " << argv[0] << " <problem size> <grid size>\n";
     return 1;
   }
-
-  int problem_size = 1 << atoi(argv[1]);
-  int grid_size = 1 << atoi(argv[2]);
-  std::cout << "Problem size: " << problem_size << " - Grid size: " << grid_size
-            << std::endl;
 
   std::vector<cl::Platform> platforms;
   cl::Platform::get(&platforms);
@@ -54,18 +97,46 @@ int main(int argc, char** argv) {
   auto gpu = devices.front();
 
   std::cout << "Device: " << gpu.getInfo<CL_DEVICE_NAME>() << std::endl;
+  std::cout << "Global memory: "
+            << readable_bytes(gpu.getInfo<CL_DEVICE_GLOBAL_MEM_SIZE>())
+            << " - Max memory allocation size: "
+            << readable_bytes(gpu.getInfo<CL_DEVICE_MAX_MEM_ALLOC_SIZE>())
+            << std::endl;
+  std::cout << "---------------------------------------------------------\n";
 
   cl::Context context(gpu);
   cl::CommandQueue queue(context);
 
-  std::vector<Point3> dataset = generate_dataset(problem_size);
-
   struct timeval startwtime, endwtime;
   double seq_time;
 
+  int problem_size = 1 << atoi(argv[1]);
+  int grid_size = 1 << atoi(argv[2]);
+  std::cout << "Problem size: " << problem_size
+            << " points - Grid size: " << grid_size << std::endl;
+
   try {
+    BoxFinder box_finder(context);
+    Sorter sorter(context);
+
+    std::vector<Point3> dataset = generate_dataset(problem_size);
+
+    // Generate the box numbers.
+    std::vector<int2_t> boxes(dataset.size());
+    std::cout << "Processing..." << std::endl;
+    std::cout.flush();
     gettimeofday(&startwtime, NULL);
+    box_finder.map_to_boxes(queue, dataset, boxes, grid_size);
+    queue.finish();
+
+    sorter.sort(queue, boxes);
+    queue.finish();
+
     gettimeofday(&endwtime, NULL);
+
+    std::cout << "Verifying..." << std::endl;
+    verify_box_mapping(dataset, boxes, grid_size);
+
   } catch (const cl::Error& error) {
     std::cerr << "Error: " << error.what() << " - "
               << getErrorString(error.err()) << std::endl;
@@ -74,5 +145,6 @@ int main(int argc, char** argv) {
 
   seq_time = (double) ((endwtime.tv_usec - startwtime.tv_usec) / 1.0e6 +
                        endwtime.tv_sec - startwtime.tv_sec);
-  std::printf("Time: %.3f s\n", seq_time);
+  std::printf("Processing time: %.3f s - At least %.2f MElements/s\n", seq_time,
+              problem_size / seq_time * 0.000001f);
 }

@@ -1,6 +1,9 @@
 #pragma once
 #include "cl.hpp"
 #include <fstream>
+#include <iostream>
+#include <sstream>
+#include <string>
 
 class KernelAlgorithm {
  public:
@@ -14,18 +17,25 @@ class KernelAlgorithm {
   cl::Device device;
 
   void load_program(std::string path) {
-    std::ifstream kernel_stream(path);
+    std::ifstream kernel_stream("kernels/" + path);
     std::string kernel_src((std::istreambuf_iterator<char>(kernel_stream)),
                            std::istreambuf_iterator<char>());
 
     cl::Program::Sources sources(
         1, std::make_pair(kernel_src.c_str(), kernel_src.length() + 1));
-    program = cl::Program(context, sources);
-    if (program.build() != 0) {
-      auto device = context.getInfo<CL_CONTEXT_DEVICES>().front();
-      auto build_error = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
-      throw std::runtime_error(build_error);
+    try {
+      program = cl::Program(context, sources);
+      program.build();
+    } catch (cl::Error error) {
+      print_build_log();
+      throw std::runtime_error("Failed to compile a kernel.");
     }
+  }
+
+  void print_build_log() {
+    auto device = context.getInfo<CL_CONTEXT_DEVICES>().front();
+    auto build_error = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
+    std::cerr << "Failed to compile the kernel: " << build_error << std::endl;
   }
 };
 
@@ -169,4 +179,38 @@ inline const char* getErrorString(cl_int error) {
     default:
       return "Unknown OpenCL error";
   }
+}
+
+inline std::string readable_bytes(size_t size) {
+  size_t x = size;
+  int order = 0;
+  while (x > 1024) {
+    x /= 1024;
+    order++;
+  }
+
+  std::stringstream ss;
+  ss << x;
+
+  switch (order) {
+    case 0:
+      ss << " bytes";
+      break;
+    case 1:
+      ss << " KiB";
+      break;
+    case 2:
+      ss << " MiB";
+      break;
+    case 3:
+      ss << " GiB";
+      break;
+    case 4:
+      ss << " TiB";
+      break;
+    case 5:
+      ss << " PiB";
+      break;
+  }
+  return ss.str();
 }

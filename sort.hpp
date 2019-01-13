@@ -2,6 +2,11 @@
 #include "cl.hpp"
 #include "clutil.hpp"
 
+typedef std::array<int, 2> int2_t;
+
+//!
+//! @brief Sorts a two dimensional array using the first column as the key.
+//!
 class Sorter : public KernelAlgorithm {
  public:
   Sorter(cl::Context& _context) : KernelAlgorithm(_context) {
@@ -10,11 +15,16 @@ class Sorter : public KernelAlgorithm {
     kernel_global = cl::Kernel(program, "sort2_global");
   }
 
-  template <typename T = int>
-  void sort(cl::CommandQueue& queue, std::vector<T>& array) {
+  void sort(cl::CommandQueue& queue, std::vector<int2_t>& array) {
+    // A standard bitonic sort is used.
+    // The sort is done in two stages: First, while the portions of the array
+    // being worked on can fit within the local memory and within a single
+    // work group, a kernel that uses it is invoked. Then, a kernel using the
+    // global memory is invoked repeatedly to finish the sort. This overcomes
+    // the limitation of synchronizing work items in different work groups.
     cl::Buffer buffer(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
-                      array.size() * sizeof(T), array.data());
-    cl_uint length = array.size() / 2;
+                      array.size() * sizeof(int) * 2, &array[0]);
+    cl_uint length = array.size();
     // On a GPU, we can use the maximum work group size.
     // A CPU however has a maximum size of 1.
     uint limit = device.getInfo<CL_DEVICE_MAX_WORK_GROUP_SIZE>();
@@ -35,8 +45,8 @@ class Sorter : public KernelAlgorithm {
         queue.enqueueNDRangeKernel(kernel_global, 0, length);
       }
     }
-    queue.enqueueReadBuffer(buffer, CL_TRUE, 0, array.size() * sizeof(T),
-                            array.data());
+    queue.enqueueReadBuffer(buffer, false, 0, array.size() * sizeof(int) * 2,
+                            &array[0]);
   }
 
  protected:
