@@ -11,7 +11,20 @@
 
 struct Point3 {
   float x, y, z;
+  float operator[](size_t i) const {
+    switch (i) {
+      case 0:
+        return x;
+      case 1:
+        return y;
+      case 2:
+        return z;
+      default:
+        throw std::logic_error("Invalid index in Point3.");
+    }
+  }
 };
+static_assert(std::is_pod<Point3>(), "Point3 is not a POD!");
 
 std::vector<Point3> generate_dataset(int n) {
   std::random_device rd;
@@ -71,7 +84,7 @@ std::vector<int2_t> create_box_index(const std::vector<int2_t>& map,
     }
   }
   // Write the last element
-  if (current_box < map.size()) {
+  if (current_size > 0) {
     indices[current_box][0] = map.size() - current_size;
     indices[current_box][1] = current_size;
   }
@@ -85,6 +98,154 @@ void verify_box_index(const std::vector<int2_t>& index,
     int size = index[i][1];
     for (int j = 0; j < size; j++) {
       assert(map[j + start][0] == i);
+    }
+
+    int item_count = 0;
+    for (int2_t point : map) {
+      if (point[0] == i)
+        item_count++;
+    }
+    assert(item_count == size);
+  }
+}
+
+inline float point_distance(const Point3& a, const Point3& b) {
+  float delta_x = a.x - b.x;
+  float delta_y = a.y - b.y;
+  float delta_z = a.z - b.z;
+  return sqrtf(delta_x * delta_x + delta_y * delta_y + delta_z * delta_z);
+}
+
+std::pair<int, float> nearest_neighbor_in_box(
+    const Point3& q, const std::vector<int2_t>& map, int2_t box,
+    const std::vector<Point3>& points) {
+  int box_start = box[0];
+  int box_size = box[1];
+  int nearest_point = -1;
+  float nearest_distance = __FLT_MAX__;
+  for (int i = box_start; i < (box_start + box_size); i++) {
+    float new_distance = point_distance(points[i], q);
+    if (new_distance < nearest_distance) {
+      nearest_distance = new_distance;
+      nearest_point = i;
+    }
+  }
+  return std::make_pair(nearest_point, nearest_distance);
+}
+
+inline std::array<int, 3> coordinates_for_box(int box, int d) {
+  int z = box / (d * d);
+  box = box % (d * d);
+  int y = box / d;
+  int x = box % d;
+  return {x, y, z};
+}
+
+inline int box_for_coordinates(int x, int y, int z, int d) {
+  return x + y * d + z * d * d;
+}
+
+// Simple unit test
+void test_box_coordinates() {
+  for (int i = 0; i < 6; i++) {
+    int d = 1 << i;
+    for (int x = 0; x < d; x++) {
+      for (int y = 0; y < d; y++) {
+        for (int z = 0; z < d; z++) {
+          int box_number = box_for_coordinates(x, y, z, d);
+          auto new_coords = coordinates_for_box(box_number, d);
+          assert(new_coords[0] == x);
+          assert(new_coords[1] == y);
+          assert(new_coords[2] == z);
+        }
+      }
+    }
+  }
+}
+
+std::array<Point3, 2> find_domain_boundary(const std::array<int, 3>& box_origin,
+                                           const std::array<int, 3>& box_size,
+                                           int grid_size) {
+  float grid_step = 1.0f / grid_size;
+  Point3 origin;
+  Point3 dest;
+  origin.x = box_origin[0] * grid_step;
+  origin.y = box_origin[1] * grid_step;
+  origin.z = box_origin[2] * grid_step;
+  dest.x = origin.x + box_size[0] * grid_step;
+  dest.y = origin.y + box_size[1] * grid_step;
+  dest.z = origin.z + box_size[2] * grid_step;
+  return {origin, dest};
+}
+
+int nearest_neighbor(const Point3& q, const std::vector<int2_t>& map,
+                     const std::vector<int2_t>& index,
+                     const std::vector<Point3>& points, const int grid_size) {
+  // Find the box where we're at.
+  int start_box = box_for_point(q, grid_size);
+
+  std::pair<int, float> current_nn = std::make_pair(-1, __FLT_MAX__);
+
+  std::array<int, 3> domain_origin, domain_size;
+  domain_origin = coordinates_for_box(start_box, grid_size);
+  domain_size = {1, 1, 1};
+  while (true) {
+    for (int x = 0; x < domain_size[0]; x++) {
+      for (int y = 0; y < domain_size[1]; y++) {
+        for (int z = 0; z < domain_size[2]; z++) {
+          int abs_x = x + domain_origin[0];
+          int abs_y = y + domain_origin[1];
+          int abs_z = z + domain_origin[2];
+          int2_t box =
+              index[box_for_coordinates(abs_x, abs_y, abs_z, grid_size)];
+          if (box[1] == 0) {
+            continue;  // Skip empty boxes
+          }
+          auto new_nn = nearest_neighbor_in_box(q, map, box, points);
+          if (new_nn.second < current_nn.second)
+            current_nn = new_nn;
+        }
+      }
+    }
+
+    auto real_domain =
+        find_domain_boundary(domain_origin, domain_size, grid_size);
+
+    // Test the edges
+    bool done = true;
+    for (size_t i = 0; i < 3; i++) {
+      float p_dist = real_domain[1][i] - q[i];
+      assert(p_dist >= 0.0f);
+      if ((p_dist < current_nn.second) &&
+          (domain_origin[i] + domain_size[i] < grid_size)) {
+        domain_size[i]++;
+        done = false;
+      }
+      float m_dist = q[i] - real_domain[0][i];
+      assert(m_dist >= 0.0f);
+      if ((m_dist < current_nn.second) && (domain_origin[i] > 0)) {
+        domain_size[i]++;
+        domain_origin[i]--;
+        done = false;
+      }
+    }
+
+    if (done)
+      break;
+  }
+
+  return current_nn.first;
+}
+
+void verify_nearest_neighbor(const Point3& q, const int nn,
+                             const std::vector<Point3>& points) {
+  float nn_distance = point_distance(q, points[nn]);
+  for (int i = 0; i < points.size(); i++) {
+    if (i != nn) {
+      float distance = point_distance(q, points[i]);
+      // assert(distance >= nn_distance);
+      if (distance < nn_distance)
+        std::cerr << "Wrong result." << std::endl;
     }
   }
 }
@@ -170,7 +331,6 @@ int main(int argc, char** argv) {
     std::vector<int2_t> boxes(dataset.size());
     std::cout << "Processing..." << std::endl;
     std::cout.flush();
-    gettimeofday(&startwtime, NULL);
     box_finder.map_to_boxes(queue, dataset, boxes, grid_size);
     queue.finish();
 
@@ -180,12 +340,45 @@ int main(int argc, char** argv) {
     std::sort(boxes.begin(), boxes.end(),
               [](const int2_t& a, const int2_t& b) { return a[0] < b[0]; });
 
+#if 0
+    for (size_t i = 0; i < dataset.size(); i++) {
+      std::printf("%zu) (%f, %f, %f) - ", i, dataset[i].x, dataset[i].y,
+                  dataset[i].z);
+      int box = box_for_point(dataset[i], grid_size);
+      auto box_coords = coordinates_for_box(box, grid_size);
+      std::printf(" box: %d - bx: %d, by: %d, bz: %d\n", box, box_coords[0],
+                  box_coords[1], box_coords[2]);
+    }
+#endif
+
+    gettimeofday(&startwtime, NULL);
     std::vector<int2_t> indices = create_box_index(boxes, grid_size);
     gettimeofday(&endwtime, NULL);
+#if 0
+    for (size_t i = 0; i < indices.size(); i++) {
+      std::printf("Box %zu starts at %d and has size %d.\n", i, indices[i][0],
+                  indices[i][1]);
+    }
+#endif
 
-    std::cout << "Verifying..." << std::endl;
+    std::cout << "Verifying construction..." << std::endl;
     verify_box_mapping(dataset, boxes, grid_size);
-    verify_box_index(indices, boxes);
+    // verify_box_index(indices, boxes);
+
+    std::vector<Point3> queries = generate_dataset(problem_size);
+    std::vector<int> neighbors(problem_size);
+    std::transform(queries.begin(), queries.end(), neighbors.begin(),
+                   [&](const Point3& q) {
+                     return nearest_neighbor(q, boxes, indices, dataset,
+                                             grid_size);
+                   });
+#if 0
+    for (size_t i = 0; i < queries.size(); i++) {
+      std::printf("NN for (%f, %f, %f) is %d.\n", queries[i].x, queries[i].y,
+                  queries[i].z, neighbors[i]);
+      verify_nearest_neighbor(queries[i], neighbors[i], dataset);
+    }
+#endif
 
   } catch (const cl::Error& error) {
     std::cerr << "Error: " << error.what() << " - "
