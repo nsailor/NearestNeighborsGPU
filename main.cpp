@@ -13,15 +13,21 @@ struct Point3 {
   float x, y, z;
 };
 
-std::vector<Point3> generate_dataset(size_t n) {
+std::vector<Point3> generate_dataset(int n) {
   std::random_device rd;
   std::mt19937 gen(rd());
-  std::uniform_real_distribution<> dis(0.0, 1.0);
+  std::uniform_real_distribution<float> dis(0.0, 1.0);
   std::vector<Point3> data(n);
-  for (size_t i = 0; i < n; i++) {
+  for (int i = 0; i < n; i++) {
     data[i].x = dis(gen);
     data[i].y = dis(gen);
     data[i].z = dis(gen);
+    // If any of the components is 1.0, generate a new point
+    // This is to address https://bugs.llvm.org/show_bug.cgi?id=18767
+    if (((data[i].x) == 1.0) || (data[i].y == 1.0) || (data[i].z == 1.0)) {
+      i--;
+      continue;
+    }
   }
   return data;  // C++1x move semantics should prevent a deep copy here.
 }
@@ -36,6 +42,7 @@ int box_for_point(const Point3& point, int d) {
 
 void verify_box_mapping(const std::vector<Point3>& dataset,
                         const std::vector<int2_t>& map, int grid_size) {
+  int box_count = grid_size * grid_size * grid_size;
   for (size_t i = 0; i < map.size(); i++) {
     static int last_box = -1;
     int point_index = map[i][1];
@@ -43,7 +50,42 @@ void verify_box_mapping(const std::vector<Point3>& dataset,
     int gpu_box = map[i][0];
     assert(cpu_box == gpu_box);
     assert(gpu_box >= last_box);
+    assert(gpu_box < box_count);
     last_box = gpu_box;
+  }
+}
+
+std::vector<int2_t> create_box_index(const std::vector<int2_t>& map,
+                                     int grid_size) {
+  std::vector<int2_t> indices(grid_size * grid_size * grid_size, {0, 0});
+  int current_box = 0;
+  int current_size = 0;
+  for (size_t i = 0; i < map.size(); i++) {
+    if (current_box == map[i][0]) {
+      current_size++;
+    } else {
+      indices[current_box][0] = i - current_size;
+      indices[current_box][1] = current_size;
+      current_box = map[i][0];
+      current_size = 1;
+    }
+  }
+  // Write the last element
+  if (current_box < map.size()) {
+    indices[current_box][0] = map.size() - current_size;
+    indices[current_box][1] = current_size;
+  }
+  return indices;
+}
+
+void verify_box_index(const std::vector<int2_t>& index,
+                      const std::vector<int2_t>& map) {
+  for (size_t i = 0; i < index.size(); i++) {
+    int start = index[i][0];
+    int size = index[i][1];
+    for (int j = 0; j < size; j++) {
+      assert(map[j + start][0] == i);
+    }
   }
 }
 
@@ -138,10 +180,12 @@ int main(int argc, char** argv) {
     std::sort(boxes.begin(), boxes.end(),
               [](const int2_t& a, const int2_t& b) { return a[0] < b[0]; });
 
+    std::vector<int2_t> indices = create_box_index(boxes, grid_size);
     gettimeofday(&endwtime, NULL);
 
     std::cout << "Verifying..." << std::endl;
     verify_box_mapping(dataset, boxes, grid_size);
+    verify_box_index(indices, boxes);
 
   } catch (const cl::Error& error) {
     std::cerr << "Error: " << error.what() << " - "
