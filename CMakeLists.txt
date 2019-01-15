@@ -11,6 +11,7 @@ find_package(OpenCL REQUIRED)
 
 add_executable(NearestNeighbor main.cpp)
 target_link_libraries(NearestNeighbor OpenCL::OpenCL)
+target_include_directories(NearestNeighbor PUBLIC OpenCL::OpenCL)
 target_compile_definitions(NearestNeighbor PUBLIC CL_SILENCE_DEPRECATION=1)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
