@@ -1,6 +1,7 @@
 #pragma once
 #include "nn_util.hpp"
 #include "perf_timer.hpp"
+#include <algorithm>
 
 namespace nn {
 namespace serial {
