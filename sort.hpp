@@ -34,7 +34,7 @@ class Sorter : public KernelAlgorithm {
     if (threshold > 1) {
       kernel_local.setArg(0, buffer);
       kernel_local.setArg(1, cl::Local(threshold * 2));
-      auto err = queue.enqueueNDRangeKernel(kernel_local, 0, length, threshold);
+      queue.enqueueNDRangeKernel(kernel_local, 0, length, threshold);
     }
 
     kernel_global.setArg(0, buffer);
