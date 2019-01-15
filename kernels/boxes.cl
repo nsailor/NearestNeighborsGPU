@@ -82,12 +82,21 @@ __kernel void nearest_neighbors(__global float *queries,
 
     int3 domain_origin = coordinates_for_box(start_box, d);
     int3 domain_size = (int3)(1, 1, 1);
-
+    int3 excl_origin = domain_origin;
+    int3 excl_size = (int3)(0, 0, 0);
     while (true) {
         for (int x = 0; x < domain_size.x; x++) {
             for (int y = 0; y < domain_size.y; y++) {
                 for (int z = 0; z < domain_size.z; z++) {
                     int3 abs_box = (int3)(x, y, z) + domain_origin;
+                    if ((abs_box.x >= excl_origin.x) &&
+                            (abs_box.x < excl_origin.x + excl_size.x) &&
+                            (abs_box.y >= excl_origin.y) &&
+                            (abs_box.y < excl_origin.y + excl_size.y) &&
+                            (abs_box.z >= excl_origin.z) &&
+                            (abs_box.z < excl_origin.z + excl_size.z)) {
+                        continue;
+                    }
                     int box_id = box_for_coordinates(abs_box, d);
                     int2 box = box_index[box_id];
                     if (box.y == 0)
@@ -97,6 +106,9 @@ __kernel void nearest_neighbors(__global float *queries,
                 }
             }
         }
+
+        excl_origin = domain_origin;
+        excl_size = domain_size;
 
         // Check to see if we're done
         bool done = true;
