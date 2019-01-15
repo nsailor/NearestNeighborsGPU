@@ -7,34 +7,6 @@
 #include <cassert>
 #include <iostream>
 
-class BoxFinder : KernelAlgorithm {
- public:
-  BoxFinder(cl::Context& _context) : KernelAlgorithm(_context) {
-    load_program("boxes.cl");
-    map_to_boxes_kernel = cl::Kernel(program, "map_to_boxes");
-  }
-
-  void map_to_boxes(cl::CommandQueue& queue, std::vector<nn::Point3>& points,
-                    std::vector<nn::int2_t>& box_map, int grid_size) {
-    cl::Buffer point_buf(context, CL_MEM_READ_ONLY | CL_MEM_HOST_WRITE_ONLY,
-                         sizeof(nn::Point3) * points.size());
-    queue.enqueueWriteBuffer(point_buf, false, 0,
-                             sizeof(nn::Point3) * points.size(), &points[0]);
-    cl::Buffer boxes_buf(context, CL_MEM_WRITE_ONLY | CL_MEM_HOST_READ_ONLY,
-                         sizeof(int) * 2 * box_map.size());
-    map_to_boxes_kernel.setArg(0, point_buf);
-    map_to_boxes_kernel.setArg(1, boxes_buf);
-    map_to_boxes_kernel.setArg(2, grid_size);
-    queue.enqueueNDRangeKernel(map_to_boxes_kernel, 0, points.size());
-    queue.enqueueReadBuffer(boxes_buf, false, 0,
-                            sizeof(int) * 2 * box_map.size(),
-                            box_map[0].data());
-  }
-
- protected:
-  cl::Kernel map_to_boxes_kernel;
-};
-
 int main(int argc, char** argv) {
   if (argc != 3) {
     std::cerr << "Usage: " << argv[0] << " <problem size> <grid size>\n";
@@ -71,7 +43,6 @@ int main(int argc, char** argv) {
   perf_timer parallel_timer;
   try {
     using namespace nn;
-    BoxFinder box_finder(context);
 
     std::vector<Point3> dataset = generate_dataset(problem_size);
     std::vector<Point3> queries = generate_dataset(problem_size);
