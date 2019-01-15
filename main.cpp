@@ -190,6 +190,8 @@ int nearest_neighbor(const Point3& q, const std::vector<int2_t>& map,
   std::array<int, 3> domain_origin, domain_size;
   domain_origin = coordinates_for_box(start_box, grid_size);
   domain_size = {1, 1, 1};
+  //! Exclusion zone, boxes we've already searched
+  std::array<int, 3> excl_origin = domain_origin, excl_size = {0, 0, 0};
   while (true) {
     for (int x = 0; x < domain_size[0]; x++) {
       for (int y = 0; y < domain_size[1]; y++) {
@@ -197,6 +199,13 @@ int nearest_neighbor(const Point3& q, const std::vector<int2_t>& map,
           int abs_x = x + domain_origin[0];
           int abs_y = y + domain_origin[1];
           int abs_z = z + domain_origin[2];
+          if ((abs_x > excl_origin[0]) &&
+              (abs_x < (excl_origin[0] + excl_size[0])) &&
+              (abs_y > excl_origin[1]) &&
+              (abs_y < (excl_origin[1] + excl_size[1])) &&
+              (abs_z > excl_origin[2]) &&
+              (abs_z < (excl_origin[2] + excl_size[2])))
+            continue;
           int2_t box =
               index[box_for_coordinates(abs_x, abs_y, abs_z, grid_size)];
           if (box[1] == 0)
@@ -208,6 +217,8 @@ int nearest_neighbor(const Point3& q, const std::vector<int2_t>& map,
         }
       }
     }
+    excl_origin = domain_origin;
+    excl_size = domain_size;
     // Test the edges
     bool done = true;
     for (size_t i = 0; i < 3; i++) {
@@ -367,7 +378,7 @@ int main(int argc, char** argv) {
 
     std::cout << "Verifying construction..." << std::endl;
     verify_box_mapping(dataset, boxes, grid_size);
-    verify_box_index(indices, boxes);
+    // verify_box_index(indices, boxes);
 
     std::vector<Point3> queries = generate_dataset(problem_size);
     std::vector<int> neighbors(problem_size);
