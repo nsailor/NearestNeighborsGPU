@@ -79,11 +79,14 @@ int main(int argc, char** argv) {
     auto serial_results =
         serial::nearest_neighbors(dataset, queries, grid_size, serial_timer);
     auto parallel_results = parallel::nearest_neighbors(
-        dataset, queries, grid_size, parallel_timer);
+        context, queue, dataset, queries, grid_size, parallel_timer);
 
     std::cout << "Verifying parallel results..." << std::endl;
     for (size_t i = 0; i < queries.size(); i++) {
-      assert(parallel_results[i] == serial_results[i]);
+      if (parallel_results[i] != serial_results[i]) {
+        std::cerr << "Result mismatch; CPU says " << serial_results[i]
+                  << " while GPU says " << parallel_results[i] << std::endl;
+      }
     }
 
   } catch (const cl::Error& error) {
