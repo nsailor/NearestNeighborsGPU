@@ -1,6 +1,7 @@
 #define __CL_ENABLE_EXCEPTIONS
 #include "cl.hpp"
 #include "clutil.hpp"
+#include "nn_parallel.hpp"
 #include "nn_serial.hpp"
 #include "perf_timer.hpp"
 #include <cassert>
@@ -66,7 +67,8 @@ int main(int argc, char** argv) {
   std::cout << "Problem size: " << problem_size
             << " points - Grid size: " << grid_size << std::endl;
 
-  perf_timer cpu_timer;
+  perf_timer serial_timer;
+  perf_timer parallel_timer;
   try {
     using namespace nn;
     BoxFinder box_finder(context);
@@ -75,12 +77,13 @@ int main(int argc, char** argv) {
     std::vector<Point3> queries = generate_dataset(problem_size);
 
     auto serial_results =
-        serial::nearest_neighbors(dataset, queries, grid_size, cpu_timer);
+        serial::nearest_neighbors(dataset, queries, grid_size, serial_timer);
+    auto parallel_results = parallel::nearest_neighbors(
+        dataset, queries, grid_size, parallel_timer);
 
-    std::cout << "Verifying nearest neighbors..." << std::endl;
+    std::cout << "Verifying parallel results..." << std::endl;
     for (size_t i = 0; i < queries.size(); i++) {
-      verify_nearest_neighbor(queries[i], serial_results[i], dataset,
-                              grid_size);
+      assert(parallel_results[i] == serial_results[i]);
     }
 
   } catch (const cl::Error& error) {
@@ -89,5 +92,8 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  cpu_timer.print_results();
+  std::cout << "Serial performance:\n";
+  serial_timer.print_results();
+  std::cout << "Parallel performance:\n";
+  parallel_timer.print_results();
 }

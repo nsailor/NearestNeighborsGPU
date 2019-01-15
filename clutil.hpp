@@ -5,6 +5,30 @@
 #include <sstream>
 #include <string>
 
+void print_build_log(cl::Context& context, cl::Program& program) {
+  auto device = context.getInfo<CL_CONTEXT_DEVICES>().front();
+  auto build_error = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
+  std::cerr << "Failed to compile the kernel: " << build_error << std::endl;
+}
+
+cl::Program load_program(cl::Context& context, std::string path) {
+  std::ifstream kernel_stream("kernels/" + path);
+  std::string kernel_src((std::istreambuf_iterator<char>(kernel_stream)),
+                         std::istreambuf_iterator<char>());
+
+  cl::Program::Sources sources(
+      1, std::make_pair(kernel_src.c_str(), kernel_src.length() + 1));
+  cl::Program program;
+  try {
+    program = cl::Program(context, sources);
+    program.build();
+  } catch (const cl::Error& error) {
+    print_build_log(context, program);
+    throw std::runtime_error("Failed to compile a kernel.");
+  }
+  return program;
+}
+
 class KernelAlgorithm {
  public:
   KernelAlgorithm(cl::Context& _context) : context(_context) {
@@ -17,25 +41,7 @@ class KernelAlgorithm {
   cl::Device device;
 
   void load_program(std::string path) {
-    std::ifstream kernel_stream("kernels/" + path);
-    std::string kernel_src((std::istreambuf_iterator<char>(kernel_stream)),
-                           std::istreambuf_iterator<char>());
-
-    cl::Program::Sources sources(
-        1, std::make_pair(kernel_src.c_str(), kernel_src.length() + 1));
-    try {
-      program = cl::Program(context, sources);
-      program.build();
-    } catch (cl::Error error) {
-      print_build_log();
-      throw std::runtime_error("Failed to compile a kernel.");
-    }
-  }
-
-  void print_build_log() {
-    auto device = context.getInfo<CL_CONTEXT_DEVICES>().front();
-    auto build_error = program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device);
-    std::cerr << "Failed to compile the kernel: " << build_error << std::endl;
+    program = ::load_program(context, path);
   }
 };
 

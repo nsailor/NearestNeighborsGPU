@@ -19,11 +19,12 @@ class perf_timer {
 
   void print_results() {
     using namespace std;
-    cout << "Performance" << endl;
     cout << "Time (ms)\tTask" << endl;
+    cout << "--------------------------------" << endl;
     for (auto recording : recorded_durations) {
-      cout << recording.second << "\t" << recording.first << endl;
+      cout << recording.second << "\t\t" << recording.first << endl;
     }
+    cout << "--------------------------------" << endl;
   }
 
  private:

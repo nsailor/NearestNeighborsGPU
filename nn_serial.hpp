@@ -137,7 +137,6 @@ std::vector<int> nearest_neighbors(const std::vector<Point3>& points,
 
   // Generate the box numbers.
   std::vector<int2_t> boxes(points.size());
-  std::cout.flush();
   timer.start("Mapping to boxes");
   for (size_t i = 0; i < points.size(); i++) {
     int box = box_for_point(points[i], grid_size);
@@ -151,13 +150,13 @@ std::vector<int> nearest_neighbors(const std::vector<Point3>& points,
   timer.end();
 
   timer.start("Creating box index");
-  std::vector<int2_t> indices = serial::create_box_index(boxes, grid_size);
+  std::vector<int2_t> indices = create_box_index(boxes, grid_size);
   timer.end();
 
   timer.start("Finding nearest neighbors");
   std::transform(
       queries.begin(), queries.end(), results.begin(), [&](const Point3& q) {
-        return serial::nearest_neighbor(q, boxes, indices, points, grid_size);
+        return nearest_neighbor(q, boxes, indices, points, grid_size);
       });
   timer.end();
 
