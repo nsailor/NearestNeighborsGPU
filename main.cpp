@@ -302,22 +302,16 @@ int main(int argc, char** argv) {
     return 1;
   }
 
-  std::vector<cl::Platform> platforms;
-  cl::Platform::get(&platforms);
-  if (platforms.size() == 0) {
-    std::cerr << "OpenCL not supported.\n";
-    return 1;
+  cl::Context context;
+  try {
+    context = cl::Context(CL_DEVICE_TYPE_GPU);
+  } catch (const cl::Error& error) {
+    std::clog
+        << "Failed to find an OpenCL-capable GPU. Using the CPU instead.\n";
+    context = cl::Context(CL_DEVICE_TYPE_CPU);
   }
 
-  std::vector<cl::Device> devices;
-  platforms.front().getDevices(CL_DEVICE_TYPE_GPU, &devices);
-
-  if (devices.size() == 0) {
-    std::cout << "No OpenCL-capable GPU found.\n";
-    return 1;
-  }
-
-  auto gpu = devices.front();
+  auto gpu = context.getInfo<CL_CONTEXT_DEVICES>().front();
 
   std::cout << "Device: " << gpu.getInfo<CL_DEVICE_NAME>() << std::endl;
   std::cout << "Global memory: "
@@ -327,7 +321,6 @@ int main(int argc, char** argv) {
             << std::endl;
   std::cout << "---------------------------------------------------------\n";
 
-  cl::Context context(gpu);
   cl::CommandQueue queue(context);
 
   struct timeval startwtime, endwtime;
