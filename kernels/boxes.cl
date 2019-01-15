@@ -107,12 +107,10 @@ __kernel void nearest_neighbors(__global float *queries,
         // X
         if ((p_dist.x < current_nn.distance) &&
                 (domain_origin.x + domain_size.x < d)) {
-            // printf("X+ expanding.\n");
             domain_size.x++;
             done = false;
         }
         if ((n_dist.x < current_nn.distance) && (domain_origin.x > 0)) {
-            // printf("X- expanding.\n");
             domain_origin.x--;
             domain_size.x++;
             done = false;
