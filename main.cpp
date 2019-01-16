@@ -57,6 +57,13 @@ int main(int argc, char** argv) {
       if (parallel_results[i] != serial_results[i]) {
         std::cerr << "Result mismatch; CPU says " << serial_results[i]
                   << " while GPU says " << parallel_results[i] << std::endl;
+        const Point3& query = queries[i];
+        const Point3& cpu_nn = dataset[serial_results[i]];
+        const Point3& gpu_nn = dataset[parallel_results[i]];
+        std::cerr << "CPU distance : " << point_distance(query, cpu_nn)
+                  << std::endl;
+        std::cerr << "GPU Distance : " << point_distance(query, gpu_nn)
+                  << std::endl;
       }
     }
 

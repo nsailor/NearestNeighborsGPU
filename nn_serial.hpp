@@ -6,6 +6,38 @@
 namespace nn {
 namespace serial {
 
+std::pair<std::vector<int>, std::vector<int2_t>> create_point_bins(
+    const std::vector<Point3>& points, int d) {
+  std::vector<int> box_map(points.size());
+
+  int box_count = d * d * d;
+  int expected_density = points.size() / box_count;
+  std::vector<std::vector<int>> bins(box_count);
+  for (size_t i = 0; i < bins.size(); i++) {
+    bins[i].reserve(expected_density * 2);
+  }
+
+  for (int i = 0; i < (int) points.size(); i++) {
+    const Point3& point = points.at(i);
+    int box = box_for_point(point, d);
+    bins[box].push_back(i);
+  }
+
+  std::vector<int2_t> box_index(box_count);
+  int current_pos = 0;
+  for (int i = 0; i < box_count; i++) {
+    const std::vector<int>& bin = bins[i];
+    for (int j = 0; j < (int) bin.size(); j++) {
+      box_map[current_pos + j] = bin[j];
+    }
+    int2_t box = {current_pos, (int) bin.size()};
+    current_pos += (int) bin.size();
+    box_index[i] = box;
+  }
+
+  return std::make_pair(box_map, box_index);
+}
+
 std::vector<int2_t> create_box_index(const std::vector<int2_t>& map,
                                      int grid_size) {
   std::vector<int2_t> indices(grid_size * grid_size * grid_size, {0, 0});
@@ -30,15 +62,14 @@ std::vector<int2_t> create_box_index(const std::vector<int2_t>& map,
 }
 
 std::pair<int, float> nearest_neighbor_in_box(
-    const Point3& q, const std::vector<int2_t>& map, int2_t box,
+    const Point3& q, const std::vector<int>& map, int2_t box,
     const std::vector<Point3>& points) {
   int box_start = box[0];
   int box_size = box[1];
   int nearest_point = -1;
   float nearest_distance = 10.0f;
   for (int i = box_start; i < (box_start + box_size); i++) {
-    int point_index = map[i][1];
-    assert(map[i][0] == map[box[0]][0]);
+    int point_index = map[i];
     float new_distance = point_distance(points[point_index], q);
     if (new_distance < nearest_distance) {
       nearest_distance = new_distance;
@@ -63,7 +94,7 @@ std::array<Point3, 2> find_domain_boundary(const std::array<int, 3>& box_origin,
   return {origin, dest};
 }
 
-int nearest_neighbor(const Point3& q, const std::vector<int2_t>& map,
+int nearest_neighbor(const Point3& q, const std::vector<int>& map,
                      const std::vector<int2_t>& index,
                      const std::vector<Point3>& points, const int grid_size) {
   int start_box = box_for_point(q, grid_size);
@@ -136,28 +167,19 @@ std::vector<int> nearest_neighbors(const std::vector<Point3>& points,
                                    int grid_size, perf_timer& timer) {
   std::vector<int> results(points.size());
 
-  // Generate the box numbers.
-  std::vector<int2_t> boxes(points.size());
-  timer.start("Mapping to boxes");
-  for (size_t i = 0; i < points.size(); i++) {
-    int box = box_for_point(points[i], grid_size);
-    boxes[i] = {box, (int) i};
-  }
+  timer.start("Creating bins");
+  auto mapping = create_point_bins(points, grid_size);
   timer.end();
+  // Uncomment if the algorithm start acting funny
+  // verify_point_bins(points, mapping, grid_size);
 
-  timer.start("Sorting box map");
-  std::sort(boxes.begin(), boxes.end(),
-            [](const int2_t& a, const int2_t& b) { return a[0] < b[0]; });
-  timer.end();
-
-  timer.start("Creating box index");
-  std::vector<int2_t> indices = create_box_index(boxes, grid_size);
-  timer.end();
+  std::vector<int>& map = mapping.first;
+  std::vector<int2_t>& bin_index = mapping.second;
 
   timer.start("Finding nearest neighbors");
   std::transform(
       queries.begin(), queries.end(), results.begin(), [&](const Point3& q) {
-        return nearest_neighbor(q, boxes, indices, points, grid_size);
+        return nearest_neighbor(q, map, bin_index, points, grid_size);
       });
   timer.end();
 

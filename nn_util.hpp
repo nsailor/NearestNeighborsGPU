@@ -93,6 +93,29 @@ void verify_box_index(const std::vector<int2_t>& index,
   }
 }
 
+void verify_point_bins(
+    const std::vector<Point3>& points,
+    const std::pair<std::vector<int>, std::vector<int2_t>>& bins, int d) {
+  const std::vector<int>& map = bins.first;
+  const std::vector<int2_t>& index = bins.second;
+  for (int i = 0; i < (int) index.size(); i++) {
+    int2_t bin = index[i];
+    int start = bin[0];
+    int size = bin[1];
+    for (int j = 0; j < size; j++) {
+      int point_box = box_for_point(points[map[start + j]], d);
+      assert(point_box == i);
+    }
+
+    int item_count = 0;
+    for (const Point3& point : points) {
+      if (box_for_point(point, d) == i)
+        item_count++;
+    }
+    assert(item_count == size);
+  }
+}
+
 inline std::array<int, 3> coordinates_for_box(int box, int d) {
   int z = box / (d * d);
   box = box % (d * d);
