@@ -30,25 +30,10 @@ static nn_result_t nearest_result(nn_result_t current, nn_result_t candidate) {
     return current;
 }
 
-/* Unfortantely, we cannot pass float3 as an argument, since OpenCL assumes that
- * it is padded as a float4. */
-__kernel void map_to_boxes(__global float *points, __global int2 *map, int d) {
-    int index = get_global_id(0);
-    float3 point = vload3(index, points);
-
-    float grid_step = 1.0f / (float) d;
-    int x_box = point.x / grid_step;
-    int y_box = point.y / grid_step;
-    int z_box = point.z / grid_step;
-    int box = z_box * d * d + y_box * d + x_box;
-    map[index].x = box;
-    map[index].y = index;
-}
-
 static nn_result_t nearest_neighbor_in_box(
     float3 q,
     int2 box,
-    __global int2 *map,
+    __global int *map,
     __global float *points) {
     nn_result_t current;
     current.index = -1;
@@ -57,7 +42,7 @@ static nn_result_t nearest_neighbor_in_box(
     int box_size = box.y;
     for (int i = box_start; i < (box_start + box_size); i++) {
         nn_result_t next;
-        next.index = map[i].y;
+        next.index = map[i];
         float3 candidate = vload3(next.index, points);
         next.distance = distance(q, candidate);
         current = nearest_result(current, next);
@@ -67,7 +52,7 @@ static nn_result_t nearest_neighbor_in_box(
 
 __kernel void nearest_neighbors(__global float *queries,
                                 __global float *points,
-                                __global int2 *map,
+                                __global int *map,
                                 __global int2 *box_index,
                                 __global int *results,
                                 int d) {
