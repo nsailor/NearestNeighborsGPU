@@ -103,7 +103,9 @@ __kernel void nearest_neighbors(__global float *queries,
         vstore3(point, local_index * points_per_unit + i, primary_candidates);
         primary_indices[local_index * points_per_unit + i] = point_index;
     }
-#if 1
+
+    // Disabled since for now we are only using power-of-2 increments when binning the data.
+#if 0
     // If we are the last unit, load the overflow points.
     if (local_index == local_size - 1) {
         for (int i = 0; i < overflow_points; i++) {
