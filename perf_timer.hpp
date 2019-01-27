@@ -1,4 +1,5 @@
 #pragma once
+#include <algorithm>
 #include <chrono>
 #include <string>
 #include <vector>
@@ -25,6 +26,13 @@ class perf_timer {
       cout << recording.second << "\t\t" << recording.first << endl;
     }
     cout << "--------------------------------" << endl;
+  }
+
+  long total() {
+    return std::accumulate(recorded_durations.begin(), recorded_durations.end(),
+                           0, [&](long x, std::pair<std::string, long> rhs) {
+                             return x + rhs.second;
+                           });
   }
 
  private:

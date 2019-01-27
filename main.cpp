@@ -93,4 +93,11 @@ int main(int argc, char** argv) {
   serial_timer.print_results();
   std::cout << "Parallel performance:\n";
   parallel_timer.print_results();
+
+  long total_serial = serial_timer.total();
+  long total_parallel = parallel_timer.total();
+  float speedup = (float) total_serial / (float) total_parallel;
+  std::printf(
+      "Speedup: x%.2f - Total serial: %ld ms - Total parallel: %ld ms\n",
+      speedup, total_serial, total_parallel);
 }
