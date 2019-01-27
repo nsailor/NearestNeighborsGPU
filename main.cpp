@@ -59,23 +59,27 @@ int main(int argc, char** argv) {
     int failed_matches = 0;
     for (size_t i = 0; i < queries.size(); i++) {
       if (parallel_results[i] != serial_results[i]) {
-#if 0
-        std::cerr << "Result mismatch; CPU says " << serial_results[i]
-                  << " while GPU says " << parallel_results[i] << std::endl;
         const Point3& query = queries[i];
         const Point3& cpu_nn = dataset[serial_results[i]];
         const Point3& gpu_nn = dataset[parallel_results[i]];
-        std::cerr << "CPU distance : " << point_distance(query, cpu_nn)
+#if 0
+        std::cerr << "Result mismatch; CPU says " << serial_results[i]
+                  << " while GPU says " << parallel_results[i] << std::endl;
+                std::cerr << "CPU distance : " << point_distance(query, cpu_nn)
                   << std::endl;
         std::cerr << "GPU Distance : " << point_distance(query, gpu_nn)
                   << std::endl;
 #endif
-        failed_matches++;
+        float cpu_distance = point_distance(query, cpu_nn);
+        float gpu_distance = point_distance(query, gpu_nn);
+        if (cpu_distance != gpu_distance)
+          failed_matches++;
       }
     }
 
     if (failed_matches) {
-      std::cerr << "Possibly wrong results: " << failed_matches << std::endl;
+      std::cerr << "Possibly incorrect results: " << failed_matches
+                << std::endl;
     }
 #endif
 
