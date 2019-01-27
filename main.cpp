@@ -47,14 +47,19 @@ int main(int argc, char** argv) {
     std::vector<Point3> dataset = generate_dataset(problem_size);
     std::vector<Point3> queries = generate_dataset(problem_size);
 
-    auto serial_results =
-        serial::nearest_neighbors(dataset, queries, grid_size, serial_timer);
+    std::cout << "Running parallel search...\n";
     auto parallel_results = parallel::nearest_neighbors(
         context, queue, dataset, queries, grid_size, parallel_timer);
+    std::cout << "Running serial search...\n";
+    auto serial_results =
+        serial::nearest_neighbors(dataset, queries, grid_size, serial_timer);
 
+#if 1
     std::cout << "Verifying parallel results..." << std::endl;
+    int failed_matches = 0;
     for (size_t i = 0; i < queries.size(); i++) {
       if (parallel_results[i] != serial_results[i]) {
+#if 0
         std::cerr << "Result mismatch; CPU says " << serial_results[i]
                   << " while GPU says " << parallel_results[i] << std::endl;
         const Point3& query = queries[i];
@@ -64,8 +69,15 @@ int main(int argc, char** argv) {
                   << std::endl;
         std::cerr << "GPU Distance : " << point_distance(query, gpu_nn)
                   << std::endl;
+#endif
+        failed_matches++;
       }
     }
+
+    if (failed_matches) {
+      std::cerr << "Possibly wrong results: " << failed_matches << std::endl;
+    }
+#endif
 
   } catch (const cl::Error& error) {
     std::cerr << "Error: " << error.what() << " - "

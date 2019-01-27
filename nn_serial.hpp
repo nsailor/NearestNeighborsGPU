@@ -38,29 +38,6 @@ std::pair<std::vector<int>, std::vector<int2_t>> create_point_bins(
   return std::make_pair(box_map, box_index);
 }
 
-std::vector<int2_t> create_box_index(const std::vector<int2_t>& map,
-                                     int grid_size) {
-  std::vector<int2_t> indices(grid_size * grid_size * grid_size, {0, 0});
-  int current_box = 0;
-  int current_size = 0;
-  for (size_t i = 0; i < map.size(); i++) {
-    if (current_box == map[i][0]) {
-      current_size++;
-    } else {
-      indices[current_box][0] = i - current_size;
-      indices[current_box][1] = current_size;
-      current_box = map[i][0];
-      current_size = 1;
-    }
-  }
-  // Write the last element
-  if (current_size > 0) {
-    indices[current_box][0] = map.size() - current_size;
-    indices[current_box][1] = current_size;
-  }
-  return indices;
-}
-
 std::pair<int, float> nearest_neighbor_in_box(
     const Point3& q, const std::vector<int>& map, int2_t box,
     const std::vector<Point3>& points) {
