@@ -12,7 +12,7 @@ find_package(OpenCL REQUIRED)
 add_executable(NearestNeighbor main.cpp)
 target_link_libraries(NearestNeighbor ${OpenCL_LIBRARIES})
 target_include_directories(NearestNeighbor PUBLIC OpenCL::OpenCL)
-target_compile_definitions(NearestNeighbor PUBLIC CL_SILENCE_DEPRECATION=1)
+target_compile_definitions(NearestNeighbor PUBLIC CL_SILENCE_DEPRECATION=1 CL_USE_DEPRECATED_OPENCL_1_2_APIS)
 
 set(CPACK_PROJECT_NAME ${PROJECT_NAME})
 set(CPACK_PROJECT_VERSION ${PROJECT_VERSION})
